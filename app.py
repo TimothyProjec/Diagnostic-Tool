@@ -8,16 +8,13 @@ st.set_page_config(
     layout="wide"
 )
 
-# Custom CSS for styling and layout fixes
+# Custom CSS for styling
 st.markdown("""
     <style>
-    /* 1. Fix the top padding so the header doesn't cover the text */
     .block-container {
         padding-top: 3rem !important; 
         padding-bottom: 2rem !important;
     }
-    
-    /* 2. Make the greeting much bigger */
     .greeting {
         font-size: 4rem !important;
         color: #1f77b4;
@@ -25,8 +22,6 @@ st.markdown("""
         margin-bottom: 0px;
         line-height: 1.2;
     }
-    
-    /* 3. Style the sub-greeting */
     .sub-greeting {
         font-size: 1.8rem !important;
         color: #4a4a4a;
@@ -34,8 +29,6 @@ st.markdown("""
         margin-top: 0px;
         margin-bottom: 3rem;
     }
-    
-    /* 4. Disclaimer specific styling */
     .disclaimer-box {
         margin-top: 3rem;
         padding: 1rem;
@@ -49,16 +42,15 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- Header Section (Top Left) ---
+# --- Header Section ---
 st.markdown('<div class="greeting">Hello, Doctor 👋</div>', unsafe_allow_html=True)
 st.markdown('<div class="sub-greeting">Let\'s get started.</div>', unsafe_allow_html=True)
 
 # --- Step 1: Ambient AI Audio Input ---
 st.write("### 1. Consultation Audio")
 audio_file = st.file_uploader(
-    "Upload Audio for Ambient AI (MP3, WAV, M4A)", 
-    type=['mp3', 'wav', 'm4a'],
-    help="This module is currently in beta."
+    "Upload Audio (Optional if Patient History is provided)", 
+    type=['mp3', 'wav', 'm4a']
 )
 
 if audio_file:
@@ -78,8 +70,6 @@ uploaded_files = []
 
 if add_medical_file == 'Yes':
     st.info("You can upload a single PDF or multiple image pages.")
-    
-    # This single uploader handles multiple files (acting as "Add Pages")
     uploaded_files = st.file_uploader(
         "Upload Patient Records (PDF or Images)", 
         type=['pdf', 'png', 'jpg', 'jpeg'], 
@@ -93,52 +83,61 @@ if add_medical_file == 'Yes':
 
 st.markdown("---")
 
-# --- Step 3: Submission & Processing Simulation ---
+# --- Step 3: Submission Logic ---
 if st.button("🚀 Submit & Generate Diagnosis", type="primary", use_container_width=False):
     
-    # 1. Validation
-    if not audio_file:
-        st.warning("⚠️ Please upload an audio file to proceed.")
+    # Check what inputs we have
+    has_audio = audio_file is not None
+    has_files = add_medical_file == 'Yes' and bool(uploaded_files)
+
+    # LOGIC: If NEITHER is present, stop.
+    if not has_audio and not has_files:
+        st.error("⚠️ Please provide at least one input: Audio Recording OR Patient Files.")
+    
     else:
-        # Create a container to hold the status updates
+        # Create status container
         status_container = st.status("Initializing AI System...", expanded=True)
         
         with status_container:
-            # Simulate Audio Transcription
-            st.write("🎙️ **Transcribing Audio...**")
-            time.sleep(1.5) 
-            st.write("✅ Transcription Complete.")
-            
-            # Simulate File Reading
-            if add_medical_file == 'Yes' and uploaded_files:
+            # 1. Process Audio (Only if present)
+            if has_audio:
+                st.write("🎙️ **Transcribing Audio...**")
+                time.sleep(1.5) 
+                st.write("✅ Transcription Complete.")
+            else:
+                st.write("ℹ️ No audio provided. Skipping transcription.")
+
+            # 2. Process Files (Only if present)
+            if has_files:
                 st.write("📂 **Reading Patient Files...**")
                 time.sleep(1.5)
                 st.write("✅ Medical History Extracted.")
-            elif add_medical_file == 'Yes' and not uploaded_files:
-                st.warning("⚠️ No medical files found, skipping history...")
             else:
-                st.write("ℹ️ No medical files selected. Proceeding with audio only.")
+                st.write("ℹ️ No files provided. Skipping record analysis.")
 
-            # Simulate Diagnosis Generation
-            st.write("🧠 **Creating Diagnosis...**")
+            # 3. Final Diagnosis
+            st.write("🧠 **Synthesizing Data & Creating Diagnosis...**")
             time.sleep(1.5)
             
             status_container.update(label="Analysis Complete!", state="complete", expanded=False)
 
-        # Show Final Success Message
+        # Show Success
         st.success("🎉 Diagnosis Generated Successfully!")
         
-        # Placeholder Results
         st.markdown("### 📋 Assessment Summary")
-        st.info("The AI is ready to display the full report.")
+        if has_audio and not has_files:
+            st.info("Generated based on Consultation Audio only.")
+        elif has_files and not has_audio:
+            st.info("Generated based on Patient Records only.")
+        else:
+            st.info("Generated by combining Audio insights + Patient Records.")
 
-# --- Disclaimer Section ---
+# --- Disclaimer ---
 st.markdown("""
 <div class="disclaimer-box">
     <strong>⚠️ DISCLAIMER: AI-Assisted Diagnosis</strong><br>
-    This diagnosis is generated by Artificial Intelligence and is subject to potential inaccuracies and risks. 
+    This diagnosis is generated by Artificial Intelligence and is subject to potential inaccuracies. 
     It is designed to function <strong>solely as a decision support tool</strong>. 
     It does not replace professional medical judgment. 
-    All outputs must be verified by a qualified healthcare professional before any clinical action is taken.
 </div>
 """, unsafe_allow_html=True)
