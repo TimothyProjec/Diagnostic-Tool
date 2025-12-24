@@ -1,7 +1,7 @@
 import streamlit as st
 from datetime import datetime
-from utils.audio_handler import transcribe_audio, get_audio_info
-from utils.diagnosis_generator import generate_diagnosis_from_transcript, create_word_document
+from audio_processing.audio_handler import transcribe_audio, get_audio_info
+from audio_processing.diagnosis_generator import generate_diagnosis_from_transcript, create_word_document
 
 # Page configuration
 st.set_page_config(
