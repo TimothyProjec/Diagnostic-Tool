@@ -17,8 +17,8 @@ from ocr_handler.source_manager import (
     close_review_modal
 )
 from ocr_handler.review_modal import show_review_modal
-from chatbot_handler.chatbot_handler import initialize_chatbot, open_chat, close_chat, is_chat_open
-from chatbot_handler.chatbot_ui import render_chatbot_fullscreen
+from chatbot_handler.chatbot_handler import initialize_chatbot
+from chatbot_handler.chatbot_ui import render_chatbot_inline
 
 # ============================================================================
 # PAGE CONFIGURATION
@@ -41,6 +41,8 @@ if 'final_diagnosis' not in st.session_state:
     st.session_state.final_diagnosis = None
 if 'ready_for_download' not in st.session_state:
     st.session_state.ready_for_download = False
+if 'show_chat' not in st.session_state:
+    st.session_state.show_chat = False
 
 # ============================================================================
 # CUSTOM CSS
@@ -79,21 +81,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ============================================================================
-# CHATBOT MODE - FULL SCREEN TAKEOVER
-# ============================================================================
-if st.session_state.initial_diagnosis and is_chat_open():
-    # Get current diagnosis and source data
-    current_diag = st.session_state.get('final_diagnosis', st.session_state.initial_diagnosis)
-    source_data = get_combined_text()
-    
-    # Render full-screen chatbot (ChatGPT-style)
-    render_chatbot_fullscreen(current_diag, source_data)
-    
-    # Stop here - chatbot takes over the entire screen
-    st.stop()
-
-# ============================================================================
-# HEADER (Only shown when NOT in chatbot mode)
+# HEADER
 # ============================================================================
 st.markdown('<div class="greeting">Hello, Doctor 👋</div>', unsafe_allow_html=True)
 st.markdown('<div class="sub-greeting">Let\'s get started.</div>', unsafe_allow_html=True)
@@ -365,52 +353,85 @@ elif sources:
     st.button("🔬 Generate Initial Diagnosis", disabled=True, key="gen_diagnosis_disabled")
 
 # ============================================================================
-# STEP 5: INITIAL DIAGNOSIS DISPLAY (Before entering chat)
+# STEP 5: DISPLAY INITIAL DIAGNOSIS
 # ============================================================================
-if st.session_state.initial_diagnosis and not is_chat_open() and not st.session_state.ready_for_download:
+if st.session_state.initial_diagnosis and not st.session_state.get('ready_for_download'):
     st.markdown("---")
     st.success("### ✅ Initial Diagnosis Generated!")
     
-    st.info("👉 Click the button below to refine your diagnosis with AI assistance")
-    
-    # Show diagnosis preview (collapsed)
-    with st.expander("📋 View Initial Diagnosis", expanded=False):
+    # Show diagnosis with comparison if modified
+    if st.session_state.get('chat_modifications'):
+        st.info(f"✏️ Diagnosis has been modified {len(st.session_state.chat_modifications)} time(s)")
+        
+        tab1, tab2 = st.tabs(["Current Version", "Original Version"])
+        
+        with tab1:
+            st.text_area(
+                "Current Diagnosis",
+                st.session_state.final_diagnosis,
+                height=500,
+                disabled=True,
+                key="current_diag_display"
+            )
+        
+        with tab2:
+            st.text_area(
+                "Original Diagnosis",
+                st.session_state.initial_diagnosis,
+                height=500,
+                disabled=True,
+                key="original_diag_display"
+            )
+    else:
+        # No modifications yet, show single view
         st.text_area(
-            "Initial Diagnosis", 
+            "Diagnostic Report", 
             st.session_state.initial_diagnosis, 
             height=500,
             disabled=True,
-            key="initial_diag_preview"
+            key="single_diag_display"
         )
     
     st.markdown("---")
     
-    # Single prominent button to enter chatbot
-    col1, col2, col3 = st.columns([1, 2, 1])
-    
-    with col2:
-        if st.button(
-            "💬 Refine with AI Assistant", 
-            key="enter_chat_btn", 
-            type="primary", 
-            use_container_width=True,
-            help="Open AI chat to review and improve the diagnosis"
-        ):
-            open_chat()
-            st.rerun()
-    
-    st.markdown("---")
-    st.caption("💡 Tip: Use AI chat to modify, explain, or add to the diagnosis before finalizing")
+    # Chat section toggle
+    if not st.session_state.show_chat:
+        # Show buttons to open chat or skip to download
+        col1, col2, col3 = st.columns([1, 1, 1])
+        
+        with col1:
+            if st.button("💬 Refine with AI", key="open_chat_btn", use_container_width=True):
+                st.session_state.show_chat = True
+                st.rerun()
+        
+        with col2:
+            if st.button("📄 Finalize & Download", key="skip_chat_btn", type="primary", use_container_width=True):
+                st.session_state.ready_for_download = True
+                st.rerun()
+        
+        with col3:
+            st.caption("💡 Refine diagnosis or proceed to download")
 
 # ============================================================================
-# STEP 6: DOWNLOAD (Only shown after exiting chat)
+# STEP 6: CHATBOT (Inline on same page)
+# ============================================================================
+if st.session_state.show_chat and st.session_state.initial_diagnosis and not st.session_state.get('ready_for_download'):
+    # Get current diagnosis and source data
+    current_diag = st.session_state.get('final_diagnosis', st.session_state.initial_diagnosis)
+    source_data = get_combined_text()
+    
+    # Render inline chatbot
+    render_chatbot_inline(current_diag, source_data)
+
+# ============================================================================
+# STEP 7: DOWNLOAD OPTIONS
 # ============================================================================
 if st.session_state.get('ready_for_download') and st.session_state.final_diagnosis:
     st.markdown("---")
     st.success("### 🎉 Diagnosis Finalized!")
     
     # Show final diagnosis
-    with st.expander("📋 Final Diagnosis", expanded=True):
+    with st.expander("📋 View Final Diagnosis", expanded=True):
         
         # If modifications were made, show comparison
         if st.session_state.get('chat_modifications'):
@@ -433,7 +454,7 @@ if st.session_state.get('ready_for_download') and st.session_state.final_diagnos
                     st.session_state.initial_diagnosis,
                     height=500,
                     disabled=True,
-                    key="original_diag_display"
+                    key="original_diag_compare"
                 )
         else:
             # No modifications
@@ -489,10 +510,10 @@ if st.session_state.get('ready_for_download') and st.session_state.final_diagnos
     
     st.markdown("---")
     
-    # Option to go back to chat
-    if st.button("↩️ Back to Chat (Make More Changes)", key="back_to_chat"):
+    # Option to go back to edit
+    if st.button("↩️ Back to Edit Diagnosis", key="back_to_chat"):
         st.session_state.ready_for_download = False
-        open_chat()
+        st.session_state.show_chat = True
         st.rerun()
 
 # ============================================================================
