@@ -3,7 +3,7 @@ Modern chatbot UI with ChatGPT-style interface
 """
 
 import streamlit as st
-from utils.chatbot_handler import (
+from chatbot_handler.chatbot_handler import (
     initialize_chatbot,
     get_initial_greeting,
     add_message,
