@@ -2,8 +2,8 @@ import streamlit as st
 from datetime import datetime
 from audio_processing.audio_handler import transcribe_audio, get_audio_info
 from audio_processing.diagnosis_generation import generate_diagnosis_from_transcript, create_word_document
-from utils.ocr_handler import batch_extract_from_images
-from utils.source_manager import (
+from ocr_handler.ocr_handler import batch_extract_from_images
+from ocr_handler.source_manager import (
     initialize_source_manager,
     add_source,
     get_all_sources,
@@ -15,7 +15,7 @@ from utils.source_manager import (
     open_review_modal,
     confirm_source
 )
-from utils.review_modal import show_review_modal
+from ocr_handler.review_modal import show_review_modal
 
 # Page configuration
 st.set_page_config(
