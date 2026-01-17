@@ -3,14 +3,13 @@ Modal component for reviewing and editing source text
 """
 
 import streamlit as st
-from utils.source_manager import (
+from ocr_handler.source_manager import (  # ← Fixed path
     get_source_by_id, 
     update_source_text, 
     confirm_source,
     discard_source,
     close_review_modal
 )
-
 
 @st.dialog("📝 Review & Edit Source", width="large")
 def show_review_modal(source_id):
