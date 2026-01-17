@@ -18,7 +18,7 @@ from ocr_handler.source_manager import (
 )
 from ocr_handler.review_modal import show_review_modal
 from chatbot_handler.chatbot_handler import initialize_chatbot, open_chat, close_chat, is_chat_open
-from cahtbot_handler.chatbot_ui import render_chatbot_fullscreen
+from chatbot_handler.chatbot_ui import render_chatbot_fullscreen
 
 # ============================================================================
 # PAGE CONFIGURATION
