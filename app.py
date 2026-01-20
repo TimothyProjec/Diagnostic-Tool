@@ -92,37 +92,6 @@ st.markdown('<div class="sub-greeting">Let\'s get started.</div>', unsafe_allow_
 # ============================================================================
 # STEP 1: AUDIO UPLOAD & TRANSCRIPTION
 # ============================================================================
-st.write("### 1. Consultation Audio")
-st.caption("1GB max | Auto-chunks 41min+ files into 8min segments")
-
-if "audio_data" not in st.session_state:
-    st.session_state.audio_data = {}
-
-audio_files = st.file_uploader(
-    "Upload Audio (1GB OK)", 
-    type=['mp3', 'wav', 'm4a', 'mp4', 'mpeg', 'mpga', 'webm'],
-    accept_multiple_files=True,
-    key="audio_uploader",
-    help="Your 500MB/41min file works perfectly"
-)
-
-if audio_files:
-    new_files = {f.name: f.getvalue() for f in audio_files}
-    if new_files != st.session_state.audio_data:
-        st.session_state.audio_data = new_files
-        st.rerun()
-
-if st.session_state.audio_data:
-    st.success(f"✅ {len(st.session_state.audio_data)} file(s) | 1GB limit active")
-    
-    for filename, audio_bytes in st.session_state.audio_data.items():
-        size_mb = len(audio_bytes)/1024/1024
-        st.caption(f"🎙️ {filename} - {size_mb:.1f}MB {'✅ <1GB' if size_mb<1024 else '⚠️ Near limit'}")
-
-    # CHUNK TRANSCRIBE BUTTON
-    if st.button("🎙️ Transcribe with Smart Chunking", key="chunk_btn", type="primary"):
-        chunk_transcribe_all()
-
 def chunk_transcribe_all():
     """1GB → reliable chunks"""
     progress = st.progress(0)
@@ -184,6 +153,38 @@ def smart_chunk_audio(audio_bytes, max_chunk_mb=20, target_minutes=8):
     
     return chunks
     
+st.write("### 1. Consultation Audio")
+st.caption("1GB max | Auto-chunks 41min+ files into 8min segments")
+
+if "audio_data" not in st.session_state:
+    st.session_state.audio_data = {}
+
+audio_files = st.file_uploader(
+    "Upload Audio (1GB OK)", 
+    type=['mp3', 'wav', 'm4a', 'mp4', 'mpeg', 'mpga', 'webm'],
+    accept_multiple_files=True,
+    key="audio_uploader",
+    help="Your 500MB/41min file works perfectly"
+)
+
+if audio_files:
+    new_files = {f.name: f.getvalue() for f in audio_files}
+    if new_files != st.session_state.audio_data:
+        st.session_state.audio_data = new_files
+        st.rerun()
+
+if st.session_state.audio_data:
+    st.success(f"✅ {len(st.session_state.audio_data)} file(s) | 1GB limit active")
+    
+    for filename, audio_bytes in st.session_state.audio_data.items():
+        size_mb = len(audio_bytes)/1024/1024
+        st.caption(f"🎙️ {filename} - {size_mb:.1f}MB {'✅ <1GB' if size_mb<1024 else '⚠️ Near limit'}")
+
+    # CHUNK TRANSCRIBE BUTTON
+    if st.button("🎙️ Transcribe with Smart Chunking", key="chunk_btn", type="primary"):
+        chunk_transcribe_all()
+
+
 # ============================================================================
 # STEP 2: DOCUMENT UPLOAD & OCR
 # ============================================================================
