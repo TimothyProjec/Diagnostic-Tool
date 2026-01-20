@@ -92,6 +92,10 @@ st.markdown('<div class="sub-greeting">Let\'s get started.</div>', unsafe_allow_
 st.write("### 1. Consultation Audio")
 st.caption("Upload audio recordings of patient consultations")
 
+# ✅ FIXED: Session state to survive reruns
+if "audio_files" not in st.session_state:
+    st.session_state.audio_files = []
+
 audio_files = st.file_uploader(
     "Upload Audio Files (Optional)", 
     type=['mp3', 'wav', 'm4a', 'mp4', 'mpeg', 'mpga', 'webm'],
@@ -100,15 +104,21 @@ audio_files = st.file_uploader(
     help="You can upload multiple audio files"
 )
 
-if audio_files:
-    st.success(f"✅ {len(audio_files)} audio file(s) loaded")
+# ✅ FIXED: Save uploaded files to session state when changed
+if audio_files and len(audio_files) != len(st.session_state.audio_files):
+    st.session_state.audio_files = list(audio_files)
+    st.rerun()
+
+# ✅ FIXED: Show status from session state (survives reruns)
+if st.session_state.audio_files:
+    st.success(f"✅ {len(st.session_state.audio_files)} audio file(s) loaded")
     
-    for audio_file in audio_files:
+    for audio_file in st.session_state.audio_files:
         audio_info = get_audio_info(audio_file)
         st.caption(f"🎙️ {audio_file.name} - {audio_info['size_kb']} KB")
     
     # Check if already transcribed
-    audio_filenames = [f.name for f in audio_files]
+    audio_filenames = [f.name for f in st.session_state.audio_files]
     existing_audio = [s for s in get_all_sources() if s['type'] == 'audio' and s['filename'] in audio_filenames]
     
     if existing_audio:
@@ -120,9 +130,9 @@ if audio_files:
         status_container = st.status("🎙️ Transcribing audio...", expanded=True)
         
         with status_container:
-            st.write(f"🎤 Processing {len(audio_files)} audio file(s)...")
+            st.write(f"🎤 Processing {len(st.session_state.audio_files)} audio file(s)...")
             
-            for audio_file in audio_files:
+            for audio_file in st.session_state.audio_files:  # ✅ Use session_state
                 # Skip if already transcribed
                 if any(s['filename'] == audio_file.name for s in get_all_sources()):
                     st.write(f"   ⏭️ Skipping {audio_file.name} (already transcribed)")
@@ -149,8 +159,6 @@ if audio_files:
         
         st.success("🎉 Audio transcription complete! Review sources below.")
         st.rerun()
-
-st.markdown("---")
 
 # ============================================================================
 # STEP 2: DOCUMENT UPLOAD & OCR
