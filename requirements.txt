@@ -1,6 +1,6 @@
 streamlit
 openai>=1.10.0
 python-docx
-librosa==0.10.1
+pydub
 soundfile==0.12.1
 
