@@ -100,12 +100,13 @@ audio_files = st.file_uploader(
     "Upload Audio Files (Optional)", 
     type=['mp3', 'wav', 'm4a', 'mp4', 'mpeg', 'mpga', 'webm'],
     accept_multiple_files=True,
-    key="audio_uploader"
+    key="audio_uploader",
+    help="You can upload multiple audio files"
 )
 
 # ✅ FIXED: Store BYTES in session state (safe across reruns)
 if audio_files:
-    new_files = {f.name: f.read() for f in audio_files}
+    new_files = {f.name: f.getvalue() for f in audio_files}  # ✅ CHANGED: .getvalue()
     if new_files != st.session_state.audio_data:
         st.session_state.audio_data = new_files
         st.rerun()
@@ -118,10 +119,11 @@ if st.session_state.audio_data:
         st.caption(f"🎙️ {filename} - {len(audio_bytes)/1024:.0f} KB")
     
     # Check if already transcribed
-    existing_audio = [s for s in get_all_sources() if s['filename'] in st.session_state.audio_data]
+    audio_filenames = list(st.session_state.audio_data.keys())
+    existing_audio = [s for s in get_all_sources() if s['type'] == 'audio' and s['filename'] in audio_filenames]
     
     if existing_audio:
-        st.info(f"ℹ️ {len(existing_audio)} audio file(s) already transcribed.")
+        st.info(f"ℹ️ {len(existing_audio)} audio file(s) already transcribed. See sources below.")
     
     # ✅ FIXED: Transcription button
     if st.button("🎙️ Transcribe Audio Files", key="audio_transcribe_btn", type="primary"):
@@ -129,20 +131,26 @@ if st.session_state.audio_data:
         status_container = st.status("🎙️ Transcribing audio...", expanded=True)
         
         with status_container:
-            st.write(f"🎤 Processing {len(st.session_state.audio_data)} file(s)...")
+            st.write(f"🎤 Processing {len(st.session_state.audio_data)} audio file(s)...")
             
             for filename, audio_bytes in st.session_state.audio_data.items():
                 # Skip if already transcribed
                 if any(s['filename'] == filename for s in get_all_sources()):
-                    st.write(f"   ⏭️ Skipping {filename}")
+                    st.write(f"   ⏭️ Skipping {filename} (already transcribed)")
                     continue
                 
                 try:
                     st.write(f"   Processing: {filename}")
                     
-                    # ✅ FIXED: Create fresh UploadedFile from bytes
+                    # ✅ FIXED: Create proper UploadedFile-like object
                     from io import BytesIO
-                    fake_file = type('obj', (object,), {'name': filename, 'read': lambda: audio_bytes})()
+                    fake_file = BytesIO(audio_bytes)
+                    fake_file.name = filename
+                    fake_file.size = len(audio_bytes)
+                    fake_file.type = 'audio/mpeg'  # ✅ ADDED
+                    
+                    # ✅ FIXED: Reset position for Whisper tempfile
+                    fake_file.seek(0)
                     
                     transcript_text = transcribe_audio(fake_file)
                     
@@ -151,7 +159,10 @@ if st.session_state.audio_data:
                             source_type="audio",
                             filename=filename,
                             raw_text=transcript_text,
-                            metadata={'size_kb': len(audio_bytes)/1024}
+                            metadata={
+                                'size_kb': len(audio_bytes)/1024,
+                                'file_type': 'audio/mpeg'  # ✅ ADDED
+                            }
                         )
                         st.write(f"   ✅ Transcribed: {len(transcript_text.split())} words")
                     else:
@@ -160,8 +171,9 @@ if st.session_state.audio_data:
                 except Exception as e:
                     st.error(f"   ❌ Error processing {filename}: {str(e)}")
             
-            status_container.update(label="✅ Complete!", state="complete")
+            status_container.update(label="✅ Transcription Complete!", state="complete", expanded=False)
         
+        st.success("🎉 Audio transcription complete! Review sources below.")
         st.rerun()
 
 # ============================================================================
