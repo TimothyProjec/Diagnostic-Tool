@@ -1,0 +1,2 @@
+[server]
+maxUploadSize = 400  # in MB, e.g. 400, 512, 1024
