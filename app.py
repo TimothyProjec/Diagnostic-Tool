@@ -1,7 +1,6 @@
 import streamlit as st
 from datetime import datetime
 from audio_processing.audio_handler import transcribe_audio, get_audio_info
-from pydub import AudioSegment
 import soundfile as sf
 from io import BytesIO
 from audio_processing.diagnosis_generation import generate_diagnosis_from_transcript, create_word_document
