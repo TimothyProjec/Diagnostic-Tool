@@ -92,117 +92,87 @@ st.markdown('<div class="sub-greeting">Let\'s get started.</div>', unsafe_allow_
 # ============================================================================
 # STEP 1: AUDIO UPLOAD & TRANSCRIPTION
 # ============================================================================
-def chunk_audio_pydub(audio_bytes, filename, chunk_minutes=8):
-    """Split audio into 8min chunks using pydub (no librosa)"""
-    try:
-        # Detect format from extension
-        file_ext = filename.split('.')[-1].lower()
-        if file_ext == 'm4a':
-            file_ext = 'mp4'
-        
-        # Load audio
-        audio = AudioSegment.from_file(BytesIO(audio_bytes), format=file_ext)
-        
-        # Calculate chunks
-        chunk_ms = chunk_minutes * 60 * 1000  # 8min = 480,000ms
-        total_chunks = math.ceil(len(audio) / chunk_ms)
-        
-        chunks = []
-        for i in range(total_chunks):
-            start = i * chunk_ms
-            end = min((i + 1) * chunk_ms, len(audio))
-            chunk = audio[start:end]
-            
-            # Export to bytes
-            chunk_io = BytesIO()
-            chunk.export(chunk_io, format='mp3', bitrate='128k')
-            chunk_name = f"{filename.rsplit('.', 1)[0]}_chunk{i+1:02d}"
-            chunks.append((chunk_name, chunk_io.getvalue()))
-        
-        return chunks
-    except Exception as e:
-        st.error(f"Chunking failed: {e}")
-        return []
-
-def transcribe_all_with_chunking():
-    """Transcribe with auto-chunking for large files"""
-    progress = st.progress(0)
-    status = st.empty()
-    
-    total_processed = 0
-    for filename, audio_bytes in st.session_state.audio_data.items():
-        size_mb = len(audio_bytes) / 1024 / 1024
-        
-        # If >100MB, chunk it
-        if size_mb > 100:
-            status.text(f"🔪 Chunking {filename} ({size_mb:.0f}MB)...")
-            chunks = chunk_audio_pydub(audio_bytes, filename)
-            
-            for i, (chunk_name, chunk_bytes) in enumerate(chunks):
-                progress.progress((total_processed + i/len(chunks)) / len(st.session_state.audio_data))
-                status.text(f"📝 {chunk_name}")
-                
-                # Create file object for Whisper
-                fake_file = BytesIO(chunk_bytes)
-                fake_file.name = f"{chunk_name}.mp3"
-                fake_file.size = len(chunk_bytes)
-                fake_file.type = 'audio/mpeg'
-                
-                transcript = transcribe_audio(fake_file)
-                if transcript:
-                    add_source("audio", chunk_name, transcript, {
-                        'size_mb': len(chunk_bytes)/1024/1024,
-                        'chunk': i+1,
-                        'total': len(chunks)
-                    })
-        else:
-            # Small file, no chunking
-            status.text(f"📝 {filename}")
-            fake_file = BytesIO(audio_bytes)
-            fake_file.name = filename
-            fake_file.size = len(audio_bytes)
-            fake_file.type = 'audio/mpeg'
-            
-            transcript = transcribe_audio(fake_file)
-            if transcript:
-                add_source("audio", filename, transcript, {'size_mb': size_mb})
-        
-        total_processed += 1
-        progress.progress(total_processed / len(st.session_state.audio_data))
-    
-    status.success("🎉 All files transcribed!")
-    st.rerun()
-
-# UI
 st.write("### 1. Consultation Audio")
-st.caption("1GB max | Auto-chunks files >100MB")
+st.caption("Upload audio recordings of patient consultations")
 
 if "audio_data" not in st.session_state:
     st.session_state.audio_data = {}
 
 audio_files = st.file_uploader(
-    "Upload Audio (up to 1GB)", 
-    type=['mp3','wav','m4a','mp4'],
+    "Upload Audio Files (Optional)", 
+    type=['mp3', 'wav', 'm4a', 'mp4', 'mpeg', 'mpga', 'webm'],
     accept_multiple_files=True,
-    key="audio_1gb"
+    key="audio_uploader",
+    help="You can upload multiple audio files"
 )
 
+# Store in session state
 if audio_files:
     new_files = {f.name: f.getvalue() for f in audio_files}
     if new_files != st.session_state.audio_data:
         st.session_state.audio_data = new_files
         st.rerun()
 
+# Display loaded files
 if st.session_state.audio_data:
-    st.success(f"✅ {len(st.session_state.audio_data)} file(s)")
-    for fname, fbytes in st.session_state.audio_data.items():
-        size_mb = len(fbytes)/1024/1024
-        will_chunk = "→ will chunk" if size_mb > 100 else ""
-        st.caption(f"🎙️ {fname} - {size_mb:.0f}MB {will_chunk}")
+    st.success(f"✅ {len(st.session_state.audio_data)} audio file(s) loaded")
     
-    if st.button("🎙️ Transcribe (Smart)", type="primary"):
-        transcribe_all_with_chunking()
+    for filename, audio_bytes in st.session_state.audio_data.items():
+        st.caption(f"🎙️ {filename} - {len(audio_bytes)/1024/1024:.1f} MB")
+    
+    # Check if already transcribed
+    audio_filenames = list(st.session_state.audio_data.keys())
+    existing_audio = [s for s in get_all_sources() if s['type'] == 'audio' and s['filename'] in audio_filenames]
+    
+    if existing_audio:
+        st.info(f"ℹ️ {len(existing_audio)} audio file(s) already transcribed. See sources below.")
+    
+    # Transcription Button
+    if st.button("🎙️ Transcribe Audio Files", key="audio_transcribe_btn", type="primary"):
+        
+        status_container = st.status("🎙️ Transcribing audio...", expanded=True)
+        
+        with status_container:
+            st.write(f"🎤 Processing {len(st.session_state.audio_data)} audio file(s)...")
+            
+            for filename, audio_bytes in st.session_state.audio_data.items():
+                # Skip if already transcribed
+                if any(s['filename'] == filename for s in get_all_sources()):
+                    st.write(f"   ⏭️ Skipping {filename} (already transcribed)")
+                    continue
+                
+                st.write(f"   Processing: {filename}")
+                
+                # Create fresh file object
+                from io import BytesIO
+                fake_file = BytesIO(audio_bytes)
+                fake_file.name = filename
+                fake_file.size = len(audio_bytes)
+                fake_file.type = 'audio/mpeg'
+                fake_file.seek(0)
+                
+                transcript_text = transcribe_audio(fake_file)
+                
+                if transcript_text:
+                    add_source(
+                        source_type="audio",
+                        filename=filename,
+                        raw_text=transcript_text,
+                        metadata={
+                            'size_mb': len(audio_bytes)/1024/1024,
+                            'file_type': 'audio'
+                        }
+                    )
+                    st.write(f"   ✅ Transcribed: {len(transcript_text.split())} words")
+                else:
+                    st.error(f"   ❌ Transcription failed for {filename}")
+            
+            status_container.update(label="✅ Transcription Complete!", state="complete", expanded=False)
+        
+        st.success("🎉 Audio transcription complete! Review sources below.")
+        st.rerun()
 
+st.markdown("---")
 # ============================================================================
 # STEP 2: DOCUMENT UPLOAD & OCR
 # ============================================================================
