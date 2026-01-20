@@ -54,7 +54,7 @@ Language:          Ethnic:           Address:      Mobile No:
 Patient UHID:   WHBG
 Date of Initial Examination:
 Referred by:                  Primary Physician:   Dr.
-DOA                  DOD      Drs.    AB, CD, EF
+DOA                  DOD      Drs.   
 DOA                   DOD      Dr.
 
 
@@ -62,7 +62,7 @@ ADR & ALLERGIES:
 
 
 
-DIAGNOSIS: (give appropriate number of diagnoses with reasoning)
+DIAGNOSIS: (give appropriate number of diagnoses with reasoning minimum 15 and maximum 15 as well also give provisional diagnosis below diagnosis section with reason after going through all the data sources)
 
 1.
 
