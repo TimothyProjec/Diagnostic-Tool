@@ -92,72 +92,76 @@ st.markdown('<div class="sub-greeting">Let\'s get started.</div>', unsafe_allow_
 st.write("### 1. Consultation Audio")
 st.caption("Upload audio recordings of patient consultations")
 
-# ✅ FIXED: Session state to survive reruns
-if "audio_files" not in st.session_state:
-    st.session_state.audio_files = []
+# ✅ FIXED: Session state stores BYTES (not file objects)
+if "audio_data" not in st.session_state:
+    st.session_state.audio_data = {}
 
 audio_files = st.file_uploader(
     "Upload Audio Files (Optional)", 
     type=['mp3', 'wav', 'm4a', 'mp4', 'mpeg', 'mpga', 'webm'],
     accept_multiple_files=True,
-    key="audio_uploader",
-    help="You can upload multiple audio files"
+    key="audio_uploader"
 )
 
-# ✅ FIXED: Save uploaded files to session state when changed
-if audio_files and len(audio_files) != len(st.session_state.audio_files):
-    st.session_state.audio_files = list(audio_files)
-    st.rerun()
+# ✅ FIXED: Store BYTES in session state (safe across reruns)
+if audio_files:
+    new_files = {f.name: f.read() for f in audio_files}
+    if new_files != st.session_state.audio_data:
+        st.session_state.audio_data = new_files
+        st.rerun()
 
-# ✅ FIXED: Show status from session state (survives reruns)
-if st.session_state.audio_files:
-    st.success(f"✅ {len(st.session_state.audio_files)} audio file(s) loaded")
+# ✅ FIXED: Show from session state
+if st.session_state.audio_data:
+    st.success(f"✅ {len(st.session_state.audio_data)} audio file(s) loaded")
     
-    for audio_file in st.session_state.audio_files:
-        audio_info = get_audio_info(audio_file)
-        st.caption(f"🎙️ {audio_file.name} - {audio_info['size_kb']} KB")
+    for filename, audio_bytes in st.session_state.audio_data.items():
+        st.caption(f"🎙️ {filename} - {len(audio_bytes)/1024:.0f} KB")
     
     # Check if already transcribed
-    audio_filenames = [f.name for f in st.session_state.audio_files]
-    existing_audio = [s for s in get_all_sources() if s['type'] == 'audio' and s['filename'] in audio_filenames]
+    existing_audio = [s for s in get_all_sources() if s['filename'] in st.session_state.audio_data]
     
     if existing_audio:
-        st.info(f"ℹ️ {len(existing_audio)} audio file(s) already transcribed. See sources below.")
+        st.info(f"ℹ️ {len(existing_audio)} audio file(s) already transcribed.")
     
-    # Transcription Button
+    # ✅ FIXED: Transcription button
     if st.button("🎙️ Transcribe Audio Files", key="audio_transcribe_btn", type="primary"):
         
         status_container = st.status("🎙️ Transcribing audio...", expanded=True)
         
         with status_container:
-            st.write(f"🎤 Processing {len(st.session_state.audio_files)} audio file(s)...")
+            st.write(f"🎤 Processing {len(st.session_state.audio_data)} file(s)...")
             
-            for audio_file in st.session_state.audio_files:  # ✅ Use session_state
+            for filename, audio_bytes in st.session_state.audio_data.items():
                 # Skip if already transcribed
-                if any(s['filename'] == audio_file.name for s in get_all_sources()):
-                    st.write(f"   ⏭️ Skipping {audio_file.name} (already transcribed)")
+                if any(s['filename'] == filename for s in get_all_sources()):
+                    st.write(f"   ⏭️ Skipping {filename}")
                     continue
                 
-                st.write(f"   Processing: {audio_file.name}")
-                transcript_text = transcribe_audio(audio_file)
-                
-                if transcript_text:
-                    add_source(
-                        source_type="audio",
-                        filename=audio_file.name,
-                        raw_text=transcript_text,
-                        metadata={
-                            'size_kb': get_audio_info(audio_file)['size_kb'],
-                            'file_type': get_audio_info(audio_file)['type']
-                        }
-                    )
-                    st.write(f"   ✅ Transcribed: {len(transcript_text.split())} words")
-                else:
-                    st.error(f"   ❌ Transcription failed for {audio_file.name}")
+                try:
+                    st.write(f"   Processing: {filename}")
+                    
+                    # ✅ FIXED: Create fresh UploadedFile from bytes
+                    from io import BytesIO
+                    fake_file = type('obj', (object,), {'name': filename, 'read': lambda: audio_bytes})()
+                    
+                    transcript_text = transcribe_audio(fake_file)
+                    
+                    if transcript_text:
+                        add_source(
+                            source_type="audio",
+                            filename=filename,
+                            raw_text=transcript_text,
+                            metadata={'size_kb': len(audio_bytes)/1024}
+                        )
+                        st.write(f"   ✅ Transcribed: {len(transcript_text.split())} words")
+                    else:
+                        st.error(f"   ❌ No transcript for {filename}")
+                        
+                except Exception as e:
+                    st.error(f"   ❌ Error processing {filename}: {str(e)}")
             
-            status_container.update(label="✅ Transcription Complete!", state="complete", expanded=False)
+            status_container.update(label="✅ Complete!", state="complete")
         
-        st.success("🎉 Audio transcription complete! Review sources below.")
         st.rerun()
 
 # ============================================================================
