@@ -109,12 +109,11 @@ audio_files = st.file_uploader(
 
 # Stream to disk immediately (no 500MB in RAM)
 if audio_files:
+    new_files_added = False  # ← ADD THIS
     for uploaded_file in audio_files:
-        # Skip if already saved
         if not any(f['name'] == uploaded_file.name for f in st.session_state.audio_files_ready):
             temp_path = os.path.join(tempfile.gettempdir(), uploaded_file.name)
             
-            # Stream in 10MB chunks
             with open(temp_path, 'wb') as f:
                 while chunk := uploaded_file.read(10 * 1024 * 1024):
                     f.write(chunk)
@@ -124,7 +123,11 @@ if audio_files:
                 'path': temp_path,
                 'size': os.path.getsize(temp_path)
             })
-    st.rerun()
+            new_files_added = True  # ← ADD THIS
+    
+    if new_files_added:  # ← CHANGE THIS LINE
+        st.rerun()
+
 
 # Display files
 if st.session_state.audio_files_ready:
