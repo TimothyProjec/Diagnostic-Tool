@@ -97,24 +97,6 @@ from io import BytesIO
 st.write("### 1. Consultation Audio")
 st.caption("Upload audio recordings of patient consultations")
 
-# Instructions for large files
-st.info("💡 **Files >100MB?** Split into 10-15min segments before uploading (see below)")
-with st.expander("📝 How to handle large audio files"):
-    st.markdown("""
-    **For 500MB+ files (30+ minutes):**
-    
-    **Option 1: Split before uploading** (recommended)
-    - Use [MP3Cut.net](https://mp3cut.net/) (free, no install)
-    - Split into parts: `consultation_part1.mp3`, `part2.mp3`, etc.
-    - Upload all parts together
-    
-    **Option 2: Convert WAV to MP3**
-    - Use [CloudConvert](https://cloudconvert.com/wav-to-mp3)
-    - 500MB WAV → 40MB MP3 (fits Whisper 25MB limit)
-    
-    **Why?** Whisper API has 25MB limit per file.
-    """)
-
 # Session state for file paths
 if "audio_files_ready" not in st.session_state:
     st.session_state.audio_files_ready = []
