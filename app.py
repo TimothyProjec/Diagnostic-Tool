@@ -88,108 +88,105 @@ st.markdown('<div class="greeting">Hello, Doctor 👋</div>', unsafe_allow_html=
 st.markdown('<div class="sub-greeting">Let\'s get started.</div>', unsafe_allow_html=True)
 
 # ============================================================================
-# STEP 1: AUDIO UPLOAD & TRANSCRIPTION (DISK-STREAMING)
+# STEP 1: AUDIO (500MB + CHUNKING)
 # ============================================================================
 import tempfile
 import os
+import math
 
 st.write("### 1. Consultation Audio")
-st.caption("Upload audio recordings of patient consultations")
+st.caption("Large files auto-chunked into 10min segments")
 
 if "audio_files_ready" not in st.session_state:
     st.session_state.audio_files_ready = []
 
 audio_files = st.file_uploader(
-    "Upload Audio Files (Optional)", 
-    type=['mp3', 'wav', 'm4a', 'mp4', 'mpeg', 'mpga', 'webm'],
+    "Upload Audio Files", 
+    type=['mp3', 'wav', 'm4a', 'mp4'],
     accept_multiple_files=True,
-    key="audio_uploader",
-    help="Large files supported - streams to disk"
+    key="audio_uploader"
 )
 
-# Stream to disk immediately (no 500MB in RAM)
+# Save to disk
 if audio_files:
-    new_files_added = False  # ← ADD THIS
+    new_files_added = False
     for uploaded_file in audio_files:
         if not any(f['name'] == uploaded_file.name for f in st.session_state.audio_files_ready):
             temp_path = os.path.join(tempfile.gettempdir(), uploaded_file.name)
-            
             with open(temp_path, 'wb') as f:
                 while chunk := uploaded_file.read(10 * 1024 * 1024):
                     f.write(chunk)
-            
             st.session_state.audio_files_ready.append({
                 'name': uploaded_file.name,
                 'path': temp_path,
                 'size': os.path.getsize(temp_path)
             })
-            new_files_added = True  # ← ADD THIS
-    
-    if new_files_added:  # ← CHANGE THIS LINE
+            new_files_added = True
+    if new_files_added:
         st.rerun()
 
-
-# Display files
 if st.session_state.audio_files_ready:
-    st.success(f"✅ {len(st.session_state.audio_files_ready)} audio file(s) loaded")
+    st.success(f"✅ {len(st.session_state.audio_files_ready)} file(s)")
+    for f in st.session_state.audio_files_ready:
+        st.caption(f"🎙️ {f['name']} - {f['size']/1024/1024:.0f}MB")
     
-    for file_info in st.session_state.audio_files_ready:
-        st.caption(f"🎙️ {file_info['name']} - {file_info['size']/1024/1024:.1f} MB")
-    
-    # Check already transcribed
-    filenames = [f['name'] for f in st.session_state.audio_files_ready]
-    existing_audio = [s for s in get_all_sources() if s['type'] == 'audio' and s['filename'] in filenames]
-    
-    if existing_audio:
-        st.info(f"ℹ️ {len(existing_audio)} audio file(s) already transcribed. See sources below.")
-    
-    # Transcribe button
-    if st.button("🎙️ Transcribe Audio Files", key="audio_transcribe_btn", type="primary"):
+    if st.button("🎙️ Transcribe (Auto-Chunk)", type="primary"):
+        import ffmpeg
+        from io import BytesIO
         
-        status_container = st.status("🎙️ Transcribing audio...", expanded=True)
+        progress = st.progress(0)
+        status = st.empty()
         
-        with status_container:
-            st.write(f"🎤 Processing {len(st.session_state.audio_files_ready)} audio file(s)...")
+        for idx, file_info in enumerate(st.session_state.audio_files_ready):
+            size_mb = file_info['size'] / 1024 / 1024
             
-            for file_info in st.session_state.audio_files_ready:
-                filename = file_info['name']
-                file_path = file_info['path']
+            # If >20MB, chunk it
+            if size_mb > 20:
+                status.text(f"🔪 Chunking {file_info['name']}...")
                 
-                if any(s['filename'] == filename for s in get_all_sources()):
-                    st.write(f"   ⏭️ Skipping {filename} (already transcribed)")
-                    continue
+                # Get audio duration
+                probe = ffmpeg.probe(file_info['path'])
+                duration = float(probe['format']['duration'])
+                chunk_duration = 600  # 10min
+                num_chunks = math.ceil(duration / chunk_duration)
                 
-                st.write(f"   Processing: {filename}")
-                
-                # Create file object from disk
-                from io import BytesIO
-                with open(file_path, 'rb') as f:
-                    audio_bytes = f.read()
-                
-                fake_file = BytesIO(audio_bytes)
-                fake_file.name = filename
-                fake_file.size = len(audio_bytes)
-                fake_file.type = 'audio/mpeg'
-                
-                transcript_text = transcribe_audio(fake_file)
-                
-                if transcript_text:
-                    add_source(
-                        source_type="audio",
-                        filename=filename,
-                        raw_text=transcript_text,
-                        metadata={
-                            'size_kb': file_info['size']/1024,
-                            'file_type': 'audio'
-                        }
-                    )
-                    st.write(f"   ✅ Transcribed: {len(transcript_text.split())} words")
-                else:
-                    st.error(f"   ❌ Transcription failed for {filename}")
-            
-            status_container.update(label="✅ Transcription Complete!", state="complete", expanded=False)
+                for i in range(num_chunks):
+                    start = i * chunk_duration
+                    chunk_name = f"{file_info['name']}_chunk{i+1:02d}"
+                    
+                    if any(s['filename'] == chunk_name for s in get_all_sources()):
+                        continue
+                    
+                    status.text(f"📝 {chunk_name}")
+                    
+                    # Extract chunk to temp file
+                    chunk_path = f"/tmp/chunk_{i}.mp3"
+                    ffmpeg.input(file_info['path'], ss=start, t=chunk_duration).output(
+                        chunk_path, acodec='libmp3lame', ar='16000'
+                    ).overwrite_output().run(quiet=True)
+                    
+                    # Transcribe chunk
+                    with open(chunk_path, 'rb') as cf:
+                        fake_file = BytesIO(cf.read())
+                        fake_file.name = f"{chunk_name}.mp3"
+                        transcript = transcribe_audio(fake_file)
+                    
+                    if transcript:
+                        add_source("audio", chunk_name, transcript, {'chunk': i+1})
+                    
+                    os.remove(chunk_path)
+                    progress.progress((idx + (i+1)/num_chunks) / len(st.session_state.audio_files_ready))
+            else:
+                # Small file, direct transcribe
+                status.text(f"📝 {file_info['name']}")
+                with open(file_info['path'], 'rb') as f:
+                    fake_file = BytesIO(f.read())
+                    fake_file.name = file_info['name']
+                    transcript = transcribe_audio(fake_file)
+                if transcript:
+                    add_source("audio", file_info['name'], transcript, {})
         
-        st.success("🎉 Audio transcription complete! Review sources below.")
+        status.success("✅ Done!")
         st.rerun()
 
 st.markdown("---")
