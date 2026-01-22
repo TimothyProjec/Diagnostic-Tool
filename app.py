@@ -88,66 +88,85 @@ st.markdown('<div class="greeting">Hello, Doctor 👋</div>', unsafe_allow_html=
 st.markdown('<div class="sub-greeting">Let\'s get started.</div>', unsafe_allow_html=True)
 
 # ============================================================================
-# STEP 1: AUDIO UPLOAD & TRANSCRIPTION
+# STEP 1: AUDIO UPLOAD & TRANSCRIPTION (DISK-STREAMING)
 # ============================================================================
+import tempfile
+import os
+
 st.write("### 1. Consultation Audio")
 st.caption("Upload audio recordings of patient consultations")
 
-if "audio_data" not in st.session_state:
-    st.session_state.audio_data = {}
+if "audio_files_ready" not in st.session_state:
+    st.session_state.audio_files_ready = []
 
 audio_files = st.file_uploader(
     "Upload Audio Files (Optional)", 
     type=['mp3', 'wav', 'm4a', 'mp4', 'mpeg', 'mpga', 'webm'],
     accept_multiple_files=True,
     key="audio_uploader",
-    help="You can upload multiple audio files"
+    help="Large files supported - streams to disk"
 )
 
-# Store in session state
+# Stream to disk immediately (no 500MB in RAM)
 if audio_files:
-    new_files = {f.name: f.getvalue() for f in audio_files}
-    if new_files != st.session_state.audio_data:
-        st.session_state.audio_data = new_files
-        st.rerun()
+    for uploaded_file in audio_files:
+        # Skip if already saved
+        if not any(f['name'] == uploaded_file.name for f in st.session_state.audio_files_ready):
+            temp_path = os.path.join(tempfile.gettempdir(), uploaded_file.name)
+            
+            # Stream in 10MB chunks
+            with open(temp_path, 'wb') as f:
+                while chunk := uploaded_file.read(10 * 1024 * 1024):
+                    f.write(chunk)
+            
+            st.session_state.audio_files_ready.append({
+                'name': uploaded_file.name,
+                'path': temp_path,
+                'size': os.path.getsize(temp_path)
+            })
+    st.rerun()
 
-# Display loaded files
-if st.session_state.audio_data:
-    st.success(f"✅ {len(st.session_state.audio_data)} audio file(s) loaded")
+# Display files
+if st.session_state.audio_files_ready:
+    st.success(f"✅ {len(st.session_state.audio_files_ready)} audio file(s) loaded")
     
-    for filename, audio_bytes in st.session_state.audio_data.items():
-        st.caption(f"🎙️ {filename} - {len(audio_bytes)/1024/1024:.1f} MB")
+    for file_info in st.session_state.audio_files_ready:
+        st.caption(f"🎙️ {file_info['name']} - {file_info['size']/1024/1024:.1f} MB")
     
-    # Check if already transcribed
-    audio_filenames = list(st.session_state.audio_data.keys())
-    existing_audio = [s for s in get_all_sources() if s['type'] == 'audio' and s['filename'] in audio_filenames]
+    # Check already transcribed
+    filenames = [f['name'] for f in st.session_state.audio_files_ready]
+    existing_audio = [s for s in get_all_sources() if s['type'] == 'audio' and s['filename'] in filenames]
     
     if existing_audio:
         st.info(f"ℹ️ {len(existing_audio)} audio file(s) already transcribed. See sources below.")
     
-    # Transcription Button
+    # Transcribe button
     if st.button("🎙️ Transcribe Audio Files", key="audio_transcribe_btn", type="primary"):
         
         status_container = st.status("🎙️ Transcribing audio...", expanded=True)
         
         with status_container:
-            st.write(f"🎤 Processing {len(st.session_state.audio_data)} audio file(s)...")
+            st.write(f"🎤 Processing {len(st.session_state.audio_files_ready)} audio file(s)...")
             
-            for filename, audio_bytes in st.session_state.audio_data.items():
-                # Skip if already transcribed
+            for file_info in st.session_state.audio_files_ready:
+                filename = file_info['name']
+                file_path = file_info['path']
+                
                 if any(s['filename'] == filename for s in get_all_sources()):
                     st.write(f"   ⏭️ Skipping {filename} (already transcribed)")
                     continue
                 
                 st.write(f"   Processing: {filename}")
                 
-                # Create fresh file object
+                # Create file object from disk
                 from io import BytesIO
+                with open(file_path, 'rb') as f:
+                    audio_bytes = f.read()
+                
                 fake_file = BytesIO(audio_bytes)
                 fake_file.name = filename
                 fake_file.size = len(audio_bytes)
                 fake_file.type = 'audio/mpeg'
-                fake_file.seek(0)
                 
                 transcript_text = transcribe_audio(fake_file)
                 
@@ -157,7 +176,7 @@ if st.session_state.audio_data:
                         filename=filename,
                         raw_text=transcript_text,
                         metadata={
-                            'size_mb': len(audio_bytes)/1024/1024,
+                            'size_kb': file_info['size']/1024,
                             'file_type': 'audio'
                         }
                     )
@@ -171,6 +190,7 @@ if st.session_state.audio_data:
         st.rerun()
 
 st.markdown("---")
+
 # ============================================================================
 # STEP 2: DOCUMENT UPLOAD & OCR
 # ============================================================================
